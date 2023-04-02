@@ -188,6 +188,103 @@ section_header* parseSectionFile(int fd, unsigned short* header_size, unsigned s
 		return sh;	
 }
 
+int checkSF(char* filePath) { 
+	int fd = open(filePath, O_RDONLY);
+	if ( fd < 0 ) { 
+		printf("ERROR\n");
+		perror("open()");
+		exit(-1);
+	}
+	//verificam daca e fisier SF valid si daca are cel putin doua sectiuni de tipul 78
+	char magic[5];
+	if (read(fd, magic, 4*sizeof(char)) < 4) 
+		return 0;
+			
+	magic[4] = '\0';
+	if (strcmp("bqfy", magic) != 0) 
+		return 0;
+	int header_size;
+	if (read(fd, &header_size, sizeof(short)) < 2) 
+		return 0;
+		
+	int version;
+	if (read(fd, &version, sizeof(short)) < 2) 
+		return 0;
+	if (version < 107 || version > 200) 
+		return 0;
+		
+	int number_of_sections;
+	if (read(fd, &number_of_sections, sizeof(char)) < 1 ) 
+		return 0;
+	if (number_of_sections < 8 || number_of_sections > 15) 
+		return 0;
+		
+	section_header* sh = (section_header*)malloc(number_of_sections * sizeof(section_header));
+	if (sh == NULL) {
+		perror("ERROR\n");
+		exit(-1);
+  	}
+	
+	int count_78 = 0;
+	for (int i = 0; i < number_of_sections; i++) {
+		if (read(fd, sh[i].sect_name, 6 * sizeof(char)) < 6) {
+			return 0;
+		}
+		sh[i].sect_name[6] = '\0';
+		if (read(fd, &sh[i].sect_type, sizeof(char)) < 1) {
+			return 0;
+		}
+		switch(sh[i].sect_type) {
+		case 19: 
+			break;
+		case 31:
+			break;
+		case 78: 
+			count_78++;
+			break;
+		case 45:
+			break;
+		case 17: 
+			break;
+		default:
+			return 0;
+		}
+			
+		if(read(fd, &sh[i].sect_offset, sizeof(int)) < 4) 
+			return 0;
+			
+		if(read(fd, &sh[i].sect_size, sizeof(int)) < 4) 
+			return 0;
+	}
+	free(sh);
+	close(fd);
+	return ( count_78 >= 2 );	
+}
+
+void findAllSF(char* dirPath) {
+	DIR* dir = opendir(dirPath);
+	if ( dir == NULL ) {
+		printf("ERROR\n");
+		printf("invalid directory path\n");
+		exit(-1);
+	}
+	char fullPath[512];
+	struct dirent *entry = NULL;
+	struct stat statbuf;
+	while ((entry = readdir(dir)) != NULL) {
+		if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+			snprintf(fullPath, 512, "%s/%s", dirPath, entry->d_name);
+			if (lstat(fullPath, &statbuf) != 0) 
+				continue;
+			if ( S_ISREG(statbuf.st_mode) && checkSF(fullPath) ) 
+				printf("%s\n", fullPath);
+			else if (S_ISDIR(statbuf.st_mode)) 
+				findAllSF(fullPath);
+		
+		}
+	}
+	closedir(dir);
+}
 
 
 int main(int argc, char* argv[]) {
@@ -319,5 +416,31 @@ int main(int argc, char* argv[]) {
 		printf("\n");
 		
 	}
+	//2.6
+	else if ( strcmp(cmd, "findall") == 0 ) {
+		char* path = NULL;
+		if (strstr(argv[2], "path=") == argv[2]) {
+			path = argv[2] + 5; 
+		}
+		if (path == NULL || strlen(path) == 0) {
+			printf("ERROR\ninvalid path\n");
+			exit(-1);
+		}
+		DIR* dir = opendir(path);
+		if ( dir == NULL ) {
+			printf("ERROR\n");
+			printf("Invalid directory path\n");
+			exit(-1);
+		}
+		closedir(dir);
+		printf("SUCCESS\n");
+		findAllSF(path);
+	}
+	else {
+		printf("ERROR\n");
+		printf("invalid command\n");
+		exit(-1);
+	}
+		
 	return 0;
 }
