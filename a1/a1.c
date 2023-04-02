@@ -105,8 +105,9 @@ void listFunction(int argc, char* argv[]) {
 		listOption(path, recursive, has_perm_execute, size_greater);
 }
 
-void fileSizeError() {
+void fileSizeError(int fd) {
 	printf("ERROR\ninvalid file size\n");
+	close(fd);
 	exit(-1);
 }
 
@@ -120,46 +121,52 @@ typedef struct {
 section_header* parseSectionFile(int fd, unsigned short* header_size, unsigned short* version, unsigned char* number_of_sections) {
 		char magic[5];
 		if (read(fd, magic, 4*sizeof(char)) < 4) 
-			fileSizeError();
+			fileSizeError(fd);
 			
 		magic[4] = '\0';
 		if (strcmp("bqfy", magic) != 0) {
 			printf("ERROR\nwrong magic\n");
+			close(fd);
 			exit(-1);
 		}
 		
 		if (read(fd, header_size, sizeof(short)) < 2) 
-			fileSizeError();
+			fileSizeError(fd);
 		
 		if (read(fd, version, sizeof(short)) < 2) 
-			fileSizeError();
+			fileSizeError(fd);
 		
 		if (*version < 107 || *version > 200) {
 			printf("ERROR\nwrong version\n");
+			close(fd);
 			exit(-1);
 		}
 		
 		if (read(fd, number_of_sections, sizeof(char)) < 1 ) 
-			fileSizeError();
+			fileSizeError(fd);
 		
 		if (*number_of_sections < 8 || *number_of_sections > 15) {
 			printf("ERROR\nwrong sect_nr\n");
+			close(fd);
 			exit(-1);
 		}
 		
 		section_header* sh = (section_header*)malloc(*number_of_sections * sizeof(section_header));
 		if (sh == NULL) {
 			perror("ERROR\n");
+			close(fd);
 			exit(-1);
 		}
 		
 		for (int i = 0; i < *number_of_sections; i++) {
 			if (read(fd, sh[i].sect_name, 6 * sizeof(char)) < 6) {
-				fileSizeError();
+				free(sh);
+				fileSizeError(fd);
 			}
 			sh[i].sect_name[6] = '\0';
 			if (read(fd, &sh[i].sect_type, sizeof(char)) < 1) {
-				fileSizeError();
+				free(sh);
+				fileSizeError(fd);
 			}
 			switch(sh[i].sect_type) {
 			case 19: 
@@ -174,22 +181,25 @@ section_header* parseSectionFile(int fd, unsigned short* header_size, unsigned s
 				break;
 			default:
 				printf("ERROR\nwrong sect_types\n");
+				free(sh);
+				close(fd);
 				exit(-1);
 			}
 			
 			if(read(fd, &sh[i].sect_offset, sizeof(int)) < 4) {
-				fileSizeError();	
+				free(sh);
+				fileSizeError(fd);	
 			}
 			
 			if(read(fd, &sh[i].sect_size, sizeof(int)) < 4) {
-				fileSizeError();
+				free(sh);
+				fileSizeError(fd);
 			}
 		}
 		return sh;	
 }
 
-int checkSF(char* filePath) { 
-	int fd = open(filePath, O_RDONLY);
+int checkSF(int fd) { 
 	if ( fd < 0 ) { 
 		printf("ERROR\n");
 		perror("open()");
@@ -197,7 +207,7 @@ int checkSF(char* filePath) {
 	}
 	//verificam daca e fisier SF valid si daca are cel putin doua sectiuni de tipul 78
 	char magic[5];
-	if (read(fd, magic, 4*sizeof(char)) < 4) 
+	if (read(fd, magic, 4*sizeof(char)) < 4)
 		return 0;
 			
 	magic[4] = '\0';
@@ -222,16 +232,19 @@ int checkSF(char* filePath) {
 	section_header* sh = (section_header*)malloc(number_of_sections * sizeof(section_header));
 	if (sh == NULL) {
 		perror("ERROR\n");
+		close(fd);
 		exit(-1);
   	}
 	
 	int count_78 = 0;
 	for (int i = 0; i < number_of_sections; i++) {
 		if (read(fd, sh[i].sect_name, 6 * sizeof(char)) < 6) {
+			free(sh);
 			return 0;
 		}
 		sh[i].sect_name[6] = '\0';
 		if (read(fd, &sh[i].sect_type, sizeof(char)) < 1) {
+			free(sh);
 			return 0;
 		}
 		switch(sh[i].sect_type) {
@@ -247,17 +260,21 @@ int checkSF(char* filePath) {
 		case 17: 
 			break;
 		default:
+			free(sh);
 			return 0;
 		}
 			
-		if(read(fd, &sh[i].sect_offset, sizeof(int)) < 4) 
+		if(read(fd, &sh[i].sect_offset, sizeof(int)) < 4) {
+			free(sh);
 			return 0;
+		}
 			
-		if(read(fd, &sh[i].sect_size, sizeof(int)) < 4) 
+		if(read(fd, &sh[i].sect_size, sizeof(int)) < 4) {
+			free(sh);
 			return 0;
+		}
 	}
 	free(sh);
-	close(fd);
 	return ( count_78 >= 2 );	
 }
 
@@ -276,8 +293,12 @@ void findAllSF(char* dirPath) {
 			snprintf(fullPath, 512, "%s/%s", dirPath, entry->d_name);
 			if (lstat(fullPath, &statbuf) != 0) 
 				continue;
-			if ( S_ISREG(statbuf.st_mode) && checkSF(fullPath) ) 
-				printf("%s\n", fullPath);
+			if ( S_ISREG(statbuf.st_mode)) { 
+				int fd = open(fullPath, O_RDONLY);
+				if (checkSF(fd))
+					printf("%s\n", fullPath);
+				close(fd);
+			}
 			else if (S_ISDIR(statbuf.st_mode)) 
 				findAllSF(fullPath);
 		
@@ -376,8 +397,10 @@ int main(int argc, char* argv[]) {
 		unsigned short header_size, version;
 		unsigned char number_of_sections;
 		section_header* sh = parseSectionFile(fd, &header_size, &version, &number_of_sections);
-		if ( sect_nr> number_of_sections) {
+		if ( sect_nr > number_of_sections) {
 			printf("ERROR\ninvalid section\n");
+			free(sh);
+			close(fd);
 			exit(-1);
 		}
 		int current_line = 1;
@@ -386,8 +409,10 @@ int main(int argc, char* argv[]) {
 		lseek(fd, section_final - 1, SEEK_SET);
 		int pos_start = section_final, pos_final = section_start - 1;
 		for (int i = section_final - 2; i >= section_start; i--) {
-			if (read(fd, &c, sizeof(short)) < 2) 
-				fileSizeError();
+			if (read(fd, &c, sizeof(short)) < 2) {
+				free(sh);
+				fileSizeError(fd);
+			}
 			lseek(fd, -3, SEEK_CUR);
 			if (c == endline) {
 				current_line++;
@@ -402,19 +427,24 @@ int main(int argc, char* argv[]) {
 		}
 		if (current_line != line_nr && current_line != line_nr + 1) {
 			printf("ERROR\ninvalid line\n");
+			free(sh);
+			close(fd);
 			exit(-1);
 		}
 		printf("SUCCESS\n");
 		char ch;
 		lseek(fd, pos_start, SEEK_SET);	
 		for (int i = pos_start; i >= pos_final; i--) {
-			if (read(fd, &ch, sizeof(char)) < 1 )
-				fileSizeError();
+			if (read(fd, &ch, sizeof(char)) < 1 ) {
+				free(sh);
+				fileSizeError(fd);
+			}
 			printf("%c", ch);
 			lseek(fd, -2, SEEK_CUR);
 		}
 		printf("\n");
-		
+		close(fd);
+		free(sh);
 	}
 	//2.6
 	else if ( strcmp(cmd, "findall") == 0 ) {
