@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include "a2_helper.h"
 
 pthread_cond_t cond1_3 = PTHREAD_COND_INITIALIZER;
@@ -42,6 +43,53 @@ void* thread_function_3(void* arg) {
 	else
 		pthread_mutex_unlock(&mutex2_3);
 	return NULL;
+}
+
+sem_t sem_4;
+int threads_running = 0;
+int thread11_running = 0;
+pthread_mutex_t mutex1_4 = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex2_4 = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex3_4 = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond1_4 = PTHREAD_COND_INITIALIZER;
+pthread_cond_t cond2_4 = PTHREAD_COND_INITIALIZER;
+
+void* thread_function_4(void* arg) {
+    int thread_no = *((int *) arg);
+    sem_wait(&sem_4);
+    info(BEGIN, 8, thread_no);
+    
+    pthread_mutex_lock(&mutex1_4);
+    threads_running++;
+    if (thread_no == 11) {
+        thread11_running = 1;
+    }
+    pthread_cond_signal(&cond1_4);
+    pthread_cond_broadcast(&cond2_4);
+    pthread_mutex_unlock(&mutex1_4);
+
+    pthread_mutex_lock(&mutex2_4);
+    if (thread_no == 11) {
+        while (threads_running < 6) {
+            pthread_cond_wait(&cond1_4, &mutex2_4);
+        }
+    }
+    else {
+        while ((thread11_running == 0 && threads_running < 6) || thread11_running == 1) {
+            pthread_cond_wait(&cond2_4, &mutex2_4);
+        }
+    }
+    pthread_mutex_lock(&mutex3_4);
+    threads_running--;
+    info(END, 8, thread_no);
+    if (thread_no == 11) {
+        thread11_running = 2;
+        pthread_cond_broadcast(&cond2_4);
+    }
+    pthread_mutex_unlock(&mutex3_4);
+    pthread_mutex_unlock(&mutex2_4);
+    sem_post(&sem_4);
+    return NULL;
 }
 
 int main(){
@@ -130,7 +178,19 @@ int main(){
     		else if (pid8 == 0) {
     			//P8
     			info(BEGIN, 8, 0);
-    			info(END, 8, 0);
+                pthread_t threads[36];
+                int params[36];
+                if (sem_init(&sem_4, 0, 6) == 0) {
+                    perror("sem_init() error");
+                }
+                for (int i = 0; i < 36; i++) {
+                    params[i] = i + 1;
+                    pthread_create(&threads[i], NULL, thread_function_4, &params[i]);
+                }
+                for (int i = 0; i < 36; i++) {
+                    pthread_join(threads[i], NULL);
+                }
+                info(END, 8, 0);
     			exit(0);
     		}
     		pthread_t threads[4];
