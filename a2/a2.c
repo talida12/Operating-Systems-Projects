@@ -3,7 +3,46 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <pthread.h>
 #include "a2_helper.h"
+
+pthread_cond_t cond1_3 = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t mutex1_3 = PTHREAD_MUTEX_INITIALIZER;
+int thread2_has_started = 0;
+pthread_cond_t cond2_3 = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t mutex2_3 = PTHREAD_MUTEX_INITIALIZER;
+int thread1_has_ended = 0;
+
+void* thread_function_3(void* arg) {
+	int thread_no = *((int*)arg);
+	pthread_mutex_lock(&mutex1_3);
+	if(thread_no == 1) {
+		while (!thread2_has_started) 
+			pthread_cond_wait(&cond1_3, &mutex1_3);
+	}
+	info(BEGIN, 7, thread_no);
+	if (thread_no == 2) {
+		thread2_has_started = 1;
+		pthread_cond_broadcast(&cond1_3);
+		pthread_mutex_unlock(&mutex1_3);
+	}
+	else
+		pthread_mutex_unlock(&mutex1_3);
+	pthread_mutex_lock(&mutex2_3);
+	if(thread_no == 2) {
+		while (!thread1_has_ended) 
+			pthread_cond_wait(&cond2_3, &mutex2_3);
+	}
+	info(END, 7, thread_no);
+	if (thread_no == 1) {
+		thread1_has_ended = 1;
+		pthread_cond_broadcast(&cond2_3);
+		pthread_mutex_unlock(&mutex2_3);
+	}
+	else
+		pthread_mutex_unlock(&mutex2_3);
+	return NULL;
+}
 
 int main(){
     init();
@@ -93,6 +132,15 @@ int main(){
     			info(BEGIN, 8, 0);
     			info(END, 8, 0);
     			exit(0);
+    		}
+    		pthread_t threads[4];
+    		int params[4];
+    		for (int i = 0; i < 4; i++) {
+    			params[i] = i + 1;
+    			pthread_create(&threads[i], NULL, thread_function_3, &params[i]);
+    		}
+    		for (int i = 0; i < 4; i++) {
+    			pthread_join(threads[i], NULL);
     		}
     		wait(0);
     		info(END, 7, 0);
