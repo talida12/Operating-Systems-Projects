@@ -127,6 +127,7 @@ int main(int argc, char* argv[]){
 	sem1_5 = sem_open("/a2c5_semaphore1", O_CREAT, 0644, 1);
 	sem2_5 = sem_open("/a2c5_semaphore2", O_CREAT, 0644, 1);	
 	
+	// blocam semafoarele, thread-urile care se vor termina intr-un proces vor debloca semaforul, iar cele ce asteptau la el din celalalt proces vor putea trece	
 	sem_wait(sem1_5);
 	sem_wait(sem2_5);
 	
