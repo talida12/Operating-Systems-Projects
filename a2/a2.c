@@ -264,6 +264,7 @@ int main(int argc, char* argv[]){
 	sem_close(sem1_5);
 	sem_close(sem2_5);
 	
+	// stergem semafoarele din memorie
 	sem_unlink("/a2c5_semaphore1");
 	sem_unlink("/a2c5_semaphore2");
 	
