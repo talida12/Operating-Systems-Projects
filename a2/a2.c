@@ -21,9 +21,7 @@ int thread7_1_has_ended = 0;
 sem_t sem_4;
 int threads_running = 0;
 int thread11_running = 0; // 0 if not runned, 1 if it's running and 2 if it ended
-pthread_mutex_t mutex1_4 = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mutex2_4 = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mutex3_4 = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_4 = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond1_4 = PTHREAD_COND_INITIALIZER;
 pthread_cond_t cond2_4 = PTHREAD_COND_INITIALIZER;
 
@@ -72,35 +70,32 @@ void* thread_function_4(void* arg) {
     	sem_wait(&sem_4);
     	info(BEGIN, 8, thread_no);
 
-    	pthread_mutex_lock(&mutex1_4);
+    	pthread_mutex_lock(&mutex_4);
     	threads_running++;
     	if (thread_no == 11) {
-        	thread11_running = 1;
-    	}
-    	pthread_cond_signal(&cond1_4);
-    	pthread_cond_broadcast(&cond2_4);
-    	pthread_mutex_unlock(&mutex1_4);
-
-    	pthread_mutex_lock(&mutex2_4);
-    	if (thread_no == 11) {
+    	        thread11_running = 1;
         	while (threads_running < 6) {
-            		pthread_cond_wait(&cond1_4, &mutex2_4);
+            		pthread_cond_wait(&cond1_4, &mutex_4);
         	}
+    	}
+    	else if (threads_running == 6) {
+    		if (thread11_running == 1) {
+    			pthread_cond_signal(&cond1_4);
+    			pthread_cond_wait(&cond2_4, &mutex_4);
+    		}
     	}
     	else {
-        	while ((thread11_running == 0 && threads_running < 6) || thread11_running == 1) {
-            		pthread_cond_wait(&cond2_4, &mutex2_4);
+        	while (thread11_running < 2) {
+            		pthread_cond_wait(&cond2_4, &mutex_4);
         	}
     	}
-    	pthread_mutex_lock(&mutex3_4);
     	threads_running--;
     	info(END, 8, thread_no);
     	if (thread_no == 11) {
         	thread11_running = 2;
         	pthread_cond_broadcast(&cond2_4);
     	}
-    	pthread_mutex_unlock(&mutex3_4);
-    	pthread_mutex_unlock(&mutex2_4);
+    	pthread_mutex_unlock(&mutex_4);
     	sem_post(&sem_4);
     	return NULL;
 }
@@ -123,9 +118,11 @@ void* thread_function_5(void* arg) {
 int main(int argc, char* argv[]){
     	init();
     	info(BEGIN, 1, 0);
-
+	
 	sem1_5 = sem_open("/a2c5_semaphore1", O_CREAT, 0644, 1);
 	sem2_5 = sem_open("/a2c5_semaphore2", O_CREAT, 0644, 1);	
+	
+	
 	
 	// blocam semafoarele, thread-urile care se vor termina intr-un proces vor debloca semaforul, iar cele ce asteptau la el din celalalt proces vor putea trece	
 	sem_wait(sem1_5);
