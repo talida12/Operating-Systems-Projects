@@ -74,18 +74,20 @@ void* thread_function_4(void* arg) {
     	threads_running++;
     	if (thread_no == 11) {
     	        thread11_running = 1;
-        	while (threads_running < 6) {
+        	if (threads_running < 6) {
             		pthread_cond_wait(&cond1_4, &mutex_4);
         	}
     	}
     	else if (threads_running == 6) {
     		if (thread11_running == 1) {
     			pthread_cond_signal(&cond1_4);
-    			pthread_cond_wait(&cond2_4, &mutex_4);
+    			if (thread11_running == 1) {
+    				pthread_cond_wait(&cond2_4, &mutex_4);
+    			}
     		}
     	}
     	else {
-        	while (thread11_running < 2) {
+        	if (thread11_running < 2) {
             		pthread_cond_wait(&cond2_4, &mutex_4);
         	}
     	}
@@ -224,6 +226,7 @@ int main(int argc, char* argv[]){
                 		for (int i = 0; i < 36; i++) {
                     			pthread_join(threads[i], NULL);
                 		}
+                		sem_destroy(&sem_4);
                 		info(END, 8, 0);
                         	exit(0);
                 	}
