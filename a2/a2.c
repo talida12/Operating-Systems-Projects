@@ -130,7 +130,7 @@ int main(int argc, char* argv[]){
 	sem_wait(sem1_5);
 	sem_wait(sem2_5);
 	
-	//creare ierarhie de procese
+	// cream ierarhie de procese
 	int pid2 = fork();
     	if (pid2 == -1) {
         	perror("fork() error");
